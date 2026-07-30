@@ -1,0 +1,46 @@
+# ---- MatVision .gitignore ----
+
+# Local-only project documentation — NEVER pushed
+dev/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+*.pem
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+dist/
+*.tsbuildinfo
+
+# ML artifacts & data (large / private footage)
+data/
+*.parquet
+*.mp4
+*.mov
+*.webm
+mlruns/
+*.pt
+*.onnx
+models/checkpoints/
+
+# Docker / local volumes
+.volumes/
+minio-data/
+postgres-data/
