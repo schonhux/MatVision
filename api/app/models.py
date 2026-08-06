@@ -228,7 +228,7 @@ PIPELINE_STAGES: list[str] = [
     "detect_track",
     "pose",
     "features",
-    # Layer 4:  "states"
+    "states",
     # Layer 5:  "events", "consolidate", "clips"
     # Layer 6:  "stats", "observations", "report"
 ]

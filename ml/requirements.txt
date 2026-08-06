@@ -16,3 +16,7 @@ numpy>=1.26
 matplotlib>=3.8           # diagnostic plots (ID-hold over time, etc.)
 tqdm>=4.66
 pytest>=8.0               # test suite (tracking metrics, feature math)
+lightgbm>=4.5
+scikit-learn>=1.5
+joblib>=1.4
+mlflow>=2.16

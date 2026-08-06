@@ -8,6 +8,8 @@ import {
   getVideoUrl,
   listJobs,
   listEvents,
+  listStates,
+  getStateSummary,
   createEvent,
   cutClip,
   getClipUrl,
@@ -15,6 +17,9 @@ import {
   Match,
   Job,
   MatchEvent,
+  StateName,
+  StateSegment,
+  StateSummary,
 } from "@/lib/api";
 
 const STAGE_LABELS: Record<string, string> = {
@@ -34,6 +39,14 @@ const STAGE_LABELS: Record<string, string> = {
 
 const EVENT_TYPES = ["shot_attempt", "takedown", "escape", "reversal", "restart", "other"];
 
+const STATE_STYLES: Record<StateName, string> = {
+  neutral: "bg-cyan-600 hover:bg-cyan-500",
+  top: "bg-emerald-600 hover:bg-emerald-500",
+  bottom: "bg-amber-500 hover:bg-amber-400",
+  scramble: "bg-rose-600 hover:bg-rose-500",
+  stopped: "bg-neutral-600 hover:bg-neutral-500",
+};
+
 function formatMs(ms: number): string {
   const totalSeconds = Math.floor(ms / 1000);
   const m = Math.floor(totalSeconds / 60);
@@ -51,6 +64,8 @@ export default function MatchDetailPage() {
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [events, setEvents] = useState<MatchEvent[]>([]);
+  const [states, setStates] = useState<StateSegment[]>([]);
+  const [stateSummary, setStateSummary] = useState<StateSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   // Manual tagging form state
@@ -61,14 +76,18 @@ export default function MatchDetailPage() {
 
   const refresh = useCallback(async () => {
     try {
-      const [m, j, e] = await Promise.all([
+      const [m, j, e, s, summary] = await Promise.all([
         getMatch(matchId),
         listJobs(matchId),
         listEvents(matchId),
+        listStates(matchId, "preferred"),
+        getStateSummary(matchId),
       ]);
       setMatch(m);
       setJobs(j);
       setEvents(e);
+      setStates(s);
+      setStateSummary(summary);
 
       if (m.video_keys.original || m.video_keys.analysis_720p) {
         try {
@@ -166,13 +185,19 @@ export default function MatchDetailPage() {
   }
 
   const isProcessing = match.status !== "complete" && match.status !== "failed";
+  const timelineDuration = Math.max(
+    (match.duration_seconds ?? 0) * 1000,
+    stateSummary?.total_duration_ms ?? 0,
+    ...states.map((state) => state.end_ms),
+    1
+  );
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-8">
       <Link href="/dashboard" className="text-sm text-neutral-400 hover:text-neutral-200">
         &larr; Back to matches
       </Link>
-      <div className="mt-2 mb-6 flex items-center justify-between">
+      <div className="mt-2 mb-6 flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="text-2xl font-semibold">{match.title}</h1>
         <Link
           href={`/matches/${matchId}/annotate`}
@@ -224,6 +249,71 @@ export default function MatchDetailPage() {
           Video not ready yet
         </div>
       )}
+
+      <section className="mt-6 border-y border-neutral-800 py-5">
+        <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+          <div>
+            <h2 className="font-medium">Match position</h2>
+            <p className="text-xs text-neutral-500">
+              {stateSummary?.source?.startsWith("model:")
+                ? `Prediction ${stateSummary.source.slice(6)}`
+                : stateSummary?.source === "human"
+                  ? "Hand labeled"
+                  : "Waiting for state analysis"}
+            </p>
+          </div>
+          {stateSummary?.mean_confidence !== null && stateSummary?.mean_confidence !== undefined && (
+            <span className="text-xs text-neutral-400">
+              {Math.round(stateSummary.mean_confidence * 100)}% mean confidence
+            </span>
+          )}
+        </div>
+
+        {states.length > 0 ? (
+          <div className="relative h-12 overflow-hidden rounded bg-neutral-900" aria-label="Match state timeline">
+            {states.map((state) => {
+              const left = (state.start_ms / timelineDuration) * 100;
+              const width = Math.max(((state.end_ms - state.start_ms) / timelineDuration) * 100, 0.4);
+              return (
+                <button
+                  key={state.id}
+                  type="button"
+                  onClick={() => seekTo(state.start_ms)}
+                  title={`${state.state} ${formatMs(state.start_ms)}-${formatMs(state.end_ms)}`}
+                  className={`absolute top-0 h-12 border-r border-black/30 text-xs font-medium text-white ${STATE_STYLES[state.state]}`}
+                  style={{ left: `${left}%`, width: `${width}%` }}
+                  aria-label={`Seek to ${state.state} at ${formatMs(state.start_ms)}`}
+                >
+                  {width >= 8 ? state.state : ""}
+                </button>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="flex h-12 items-center rounded bg-neutral-900 px-3 text-sm text-neutral-500">
+            State timeline will appear after processing.
+          </div>
+        )}
+
+        {stateSummary && stateSummary.segment_count > 0 && (
+          <div className="mt-4 grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-5">
+            {(Object.keys(STATE_STYLES) as StateName[]).map((state) => (
+              <div key={state}>
+                <div className="flex items-center gap-2 text-xs capitalize text-neutral-400">
+                  <span className={`h-2.5 w-2.5 rounded-sm ${STATE_STYLES[state].split(" ")[0]}`} />
+                  {state}
+                </div>
+                <p className="mt-1 font-mono text-sm">
+                  {formatMs(stateSummary.duration_ms_by_state[state])}
+                  <span className="ml-1 text-xs text-neutral-600">
+                    {stateSummary.percentage_by_state[state]}%
+                  </span>
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
 
       {/* Manual tagging */}
       <section className="mt-6 rounded border border-neutral-800 bg-neutral-900 p-4">

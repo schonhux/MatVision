@@ -99,6 +99,9 @@ services:
       S3_ACCESS_KEY: matvision
       S3_SECRET_KEY: matvision123
       S3_BUCKET: matvision
+      STATE_MODEL_PATH: /code/models/state-lgbm.joblib
+    volumes:
+      - ../../models:/code/models:ro
     depends_on:
       postgres:
         condition: service_healthy

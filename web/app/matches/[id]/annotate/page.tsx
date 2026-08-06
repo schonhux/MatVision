@@ -74,7 +74,7 @@ export default function AnnotatePage() {
   const refresh = useCallback(async () => {
     try {
       const [m, e, s, a] = await Promise.all([
-        getMatch(matchId), listEvents(matchId), listStates(matchId), listAthletes(matchId),
+        getMatch(matchId), listEvents(matchId), listStates(matchId, "human"), listAthletes(matchId),
       ]);
       setMatch(m); setEvents(e); setStates(s); setAthletes(a);
       if (m.video_keys.original || m.video_keys.analysis_720p) {

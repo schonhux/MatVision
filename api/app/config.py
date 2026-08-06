@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     # Redis / queue
     redis_url: str = "redis://redis:6379/0"
 
+    state_model_path: str = "/code/models/state-lgbm.joblib"
+    state_confidence_threshold: float = 0.55
+
     max_upload_bytes: int = 1024 * 1024 * 1024
     max_duration_seconds: int = 10 * 60
     allowed_video_extensions: tuple[str, ...] = (".mp4", ".mov", ".webm")

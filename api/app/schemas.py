@@ -3,7 +3,6 @@ from typing import Literal
 
 from pydantic import BaseModel, EmailStr, Field, model_validator
 
-
 # --- Auth -------------------------------------------------------------------
 
 class SignupRequest(BaseModel):
@@ -204,6 +203,16 @@ class StateSegmentResponse(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class StateSummaryResponse(BaseModel):
+    source: str | None
+    segment_count: int
+    total_duration_ms: int
+    duration_ms_by_state: dict[str, int]
+    percentage_by_state: dict[str, float]
+    mean_confidence: float | None
+    low_confidence_count: int
 
 
 # --- Athlete identification ---------------------------------------------------
