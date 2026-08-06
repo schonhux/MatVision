@@ -1,32 +1,3 @@
-"""
-ml/notebooks/l0_tracer_bullet.py — Layer 0: Tracer Bullet
-
-Runs the full de-risking pipeline on a real wrestling match video:
-    video -> YOLO person detection -> ByteTrack -> YOLOv8-pose -> overlay + parquet
-
-This is the ONE thing we must prove before building any product code: that off-the-shelf
-detection/tracking survives real wrestling footage (two entangled bodies + a referee).
-
-*** This script requires torch + ultralytics and real compute/time. Run it on the Mac: ***
-
-    cd ml
-    python3 -m venv .venv && source .venv/bin/activate
-    pip install -r requirements.txt
-    python notebooks/l0_tracer_bullet.py --video /path/to/match.mp4 --out notebooks/output
-
-First run downloads ~12MB (yolov8n.pt) and ~7MB (yolov8n-pose.pt) automatically.
-
-Identity seeding: since Layer 0 predates the click-to-identify UI (that's Layer 2),
-identity is seeded manually — point at a frame near the start where both wrestlers are
-clearly separated and give their bounding boxes. See --wrestler-a-seed / --wrestler-b-seed.
-
-Outputs (written to --out):
-    overlay.mp4        — boxes, track ids, skeletons, colored by resolved identity
-    tracks.parquet      — frame, track_id, identity, bbox, confidence
-    poses.parquet       — frame, track_id, identity, 17 COCO keypoints (x, y, conf)
-    quality_report.json — the Layer 0 acceptance-gate numbers (see tracking_metrics.py)
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -38,7 +9,6 @@ import cv2
 import numpy as np
 import pandas as pd
 
-# Allow running as a script from anywhere in the repo.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from ml.features.tracking_metrics import (
     summarize_track_quality,
@@ -234,8 +204,7 @@ def run(args: argparse.Namespace) -> None:
     if not poses_df.empty:
         poses_df.to_parquet(out_dir / "poses.parquet", index=False)
 
-    # Active-frame mask: for the tracer bullet, treat every processed frame as
-    # "active" unless --active-range is given (a real match will refine this in Layer 3/4).
+    # Treat every processed frame as active unless a narrower range is passed in.
     active_mask = pd.Series(True, index=range(frame_idx))
     if args.active_range:
         start, end = args.active_range
@@ -283,7 +252,7 @@ def _draw_skeleton(frame: np.ndarray, kpts: np.ndarray, conf_thresh: float = 0.3
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(description="MatVision Layer 0 — Tracer Bullet")
+    p = argparse.ArgumentParser(description="Run tracking and pose on a match video")
     p.add_argument("--video", required=True, help="Path to a real match video")
     p.add_argument("--out", default="notebooks/output", help="Output directory")
     p.add_argument("--detect-model", default="yolov8n.pt")
@@ -302,7 +271,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     p.add_argument("--reid-max-dist", type=float, default=150.0,
                     help="Max pixel distance for re-ID re-attachment")
     p.add_argument("--active-range", type=int, nargs=2, default=None, metavar=("START", "END"),
-                    help="Optional: restrict the acceptance-gate calc to this frame range")
+                    help="Optional: restrict tracking metrics to this frame range")
     return p
 
 

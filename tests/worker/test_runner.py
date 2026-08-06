@@ -1,11 +1,3 @@
-"""
-Resumability — the Layer 1 acceptance criterion from BUILD_PLAN.md: 'a killed
-worker resumes from the last completed stage.' Uses fake stage modules (no ffmpeg,
-no real video) to deterministically control success/failure and count calls,
-proving the orchestration logic itself is correct independent of any one stage's
-implementation. See tests/worker/test_stages.py for the real ffmpeg stages.
-"""
-
 import sys
 import types
 from datetime import datetime, timezone, timedelta
@@ -124,10 +116,7 @@ def test_running_stage_is_not_double_processed(merged_worker_app):
 
 
 def test_stuck_running_job_is_reaped_and_retried(merged_worker_app):
-    """A job RUNNING for far longer than plausible means the worker that owned it
-    crashed. reap_stuck_running_jobs() must reset it so run_all_stages can retry it
-    within the same call — this is the actual crash-recovery path.
-    """
+    """A stale RUNNING job is reset so the pipeline can retry it."""
     from app import models
     models.PIPELINE_STAGES.clear()
     models.PIPELINE_STAGES.extend(["stage_a", "stage_b", "stage_c"])

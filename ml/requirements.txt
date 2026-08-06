@@ -1,4 +1,4 @@
-# MatVision — ML environment (Layer 0+)
+# MatVision ML environment
 # Install with:  pip install -r ml/requirements.txt
 #
 # Runs on Apple Silicon (torch picks up MPS automatically via the default PyPI index).
@@ -7,7 +7,7 @@
 
 torch>=2.2
 torchvision>=0.17
-ultralytics>=8.2         # YOLO detection + YOLOv8-pose (see dev/DECISIONS.md ADR-006)
+ultralytics>=8.2         # YOLO detection + YOLOv8-pose
 supervision>=0.29        # ByteTrack + detection/track utilities (no torch dependency itself)
 opencv-python-headless>=4.9
 pandas>=2.2

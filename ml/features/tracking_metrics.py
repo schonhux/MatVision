@@ -1,28 +1,3 @@
-"""
-ml/features/tracking_metrics.py
-
-Pure-logic evaluation of tracking quality, independent of any detection/pose model.
-This module contains the math behind Layer 0's acceptance gate:
-
-    "The two wrestlers keep stable track IDs through >= 80% of active-wrestling time."
-
-It operates purely on tabular track data (pandas DataFrames), so it is fully unit-testable
-without torch/ultralytics/a GPU — this is the part of Layer 0 we validate in a CPU sandbox.
-The detection/pose models that PRODUCE the track data (l0_tracer_bullet.py) require torch
-and real video and are meant to run on a properly resourced machine (the Mac).
-
-Expected track DataFrame schema (one row per detection per frame):
-    frame        int    — frame index
-    track_id     int    — raw tracker-assigned id (from ByteTrack or similar)
-    identity     str    — resolved identity label: 'wrestler_a', 'wrestler_b',
-                          'referee', or 'unknown'
-    x1, y1, x2, y2 float — bounding box
-    confidence   float  — detection confidence [0, 1]
-
-Expected active-frame mask: a boolean pandas Series indexed by frame number, True where
-the frame counts as "active wrestling" (excludes stoppages, restarts, dead time).
-"""
-
 from __future__ import annotations
 
 import pandas as pd
@@ -33,11 +8,7 @@ WRESTLER_IDENTITIES = ("wrestler_a", "wrestler_b")
 
 
 def dominant_track_id(df: pd.DataFrame, identity: str) -> int | None:
-    """The most frequently-assigned raw track_id for a given resolved identity.
-
-    This is the 'canonical' track for that wrestler — the id we expect to see on
-    most frames if tracking is stable. Returns None if the identity never appears.
-    """
+    """The most frequent raw track id for a resolved identity."""
     subset = df[df["identity"] == identity]
     if subset.empty:
         return None
@@ -49,13 +20,7 @@ def id_hold_fraction(
     identity: str,
     active_frames: pd.Series,
 ) -> float:
-    """Fraction of active frames where `identity` is present AND assigned to its
-    canonical track_id (i.e., no identity switch has occurred).
-
-    This is the core acceptance-gate metric. A value of 1.0 means perfect, unbroken
-    identity through every active frame. A value below the 0.80 gate means the
-    tracker is losing or swapping identities too often to trust downstream layers.
-    """
+    """Fraction of active frames where an identity stays on its main track id."""
     active_frame_numbers = set(active_frames[active_frames].index)
     if not active_frame_numbers:
         return 0.0
@@ -128,9 +93,7 @@ def summarize_track_quality(
     fps: float,
     identities: tuple[str, ...] = WRESTLER_IDENTITIES,
 ) -> dict:
-    """Full per-match quality report — this is what gets stored alongside a match's
-    tracks in Layer 3, and printed as the Layer 0 gate check result.
-    """
+    """Build a per-match tracking quality report."""
     hold = overall_id_hold(df, active_frames, identities)
     report = {
         "overall_id_hold": hold["overall"],

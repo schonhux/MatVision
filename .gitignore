@@ -1,7 +1,9 @@
 # ---- MatVision .gitignore ----
 
-# Local-only project documentation — NEVER pushed
+# Local-only project documentation
 dev/
+docs/
+/*.md
 
 # OS
 .DS_Store

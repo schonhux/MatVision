@@ -1,21 +1,3 @@
-"""
-ml/notebooks/l0_synthetic_smoketest.py — Layer 0 PLUMBING smoke test (sandbox-runnable)
-
-*** This does NOT validate the Layer 0 acceptance gate. ***
-The gate ("wrestlers hold stable IDs through >=80% of active-wrestling time") can only be
-measured on real match footage with real YOLO detections — that requires torch/ultralytics
-and belongs on the Mac (see l0_tracer_bullet.py).
-
-What THIS script validates: that the pipeline mechanics work end to end without crashing —
-video I/O, a detector-shaped interface, ByteTrack integration, identity seeding/re-ID,
-overlay rendering, and parquet export — using a synthetic video of colored blobs and a
-plain OpenCV color-threshold "detector" (no torch dependency at all). It's a fast,
-deterministic CI-style check that catches integration bugs before we ever touch real
-footage or burn Mac time.
-
-Run with:  python3 ml/notebooks/l0_synthetic_smoketest.py
-"""
-
 from __future__ import annotations
 
 import sys
@@ -31,7 +13,6 @@ from ml.features.tracking_metrics import summarize_track_quality, find_reid_cand
 
 WIDTH, HEIGHT, N_FRAMES, FPS = 480, 320, 150, 30.0
 
-# Colors (BGR) for synthetic actors: two "wrestlers" + a "referee".
 COLORS = {
     "wrestler_a": (255, 60, 60),   # blue
     "wrestler_b": (60, 60, 255),   # red

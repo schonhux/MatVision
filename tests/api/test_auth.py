@@ -1,6 +1,3 @@
-"""Auth flow — see BUILD_PLAN.md Layer 1 'how we verify': pytest auth flow."""
-
-
 def test_signup_creates_user_and_returns_token(client):
     resp = client.post("/auth/signup", json={"email": "a@test.com", "password": "hunter2222"})
     assert resp.status_code == 201

@@ -1,5 +1,4 @@
-# MatVision local dev stack — 6 services, $0/month (see SPEC.md Section 6:
-# "local-first infrastructure"). Run from the repo root:
+# MatVision local dev stack. Run from the repo root:
 #   docker compose -f infra/docker/docker-compose.yml up --build
 #
 # Bring up just the infra (no app code) while iterating on api/worker locally:

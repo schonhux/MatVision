@@ -36,7 +36,7 @@ def run(match: Match, db: Session) -> dict:
         info = probe(local_path)
         video_streams = [s for s in info.get("streams", []) if s.get("codec_type") == "video"]
         if not video_streams:
-            raise StageError("File has no video stream — is this actually a video?")
+            raise StageError("File has no video stream. Is this actually a video?")
 
         duration = float(info.get("format", {}).get("duration", 0))
         if duration <= 0:
@@ -44,7 +44,7 @@ def run(match: Match, db: Session) -> dict:
         if duration > settings.max_duration_seconds:
             raise StageError(
                 f"Video is {duration:.0f}s, longer than the {settings.max_duration_seconds}s limit "
-                f"(see SPEC.md input limits)"
+                "for uploads"
             )
 
         stream = video_streams[0]

@@ -1,12 +1,3 @@
-"""
-tests/pipeline/test_tracking_metrics.py
-
-Unit tests for ml/features/tracking_metrics.py — the pure-logic tracking-quality
-math behind the Layer 0 acceptance gate. Runs anywhere (no torch, no GPU, no video).
-
-Run with:  pytest tests/pipeline/test_tracking_metrics.py -v
-"""
-
 import pandas as pd
 import pytest
 

@@ -1,10 +1,3 @@
-"""
-Real ffmpeg tests for VALIDATE and TRANSCODE — see BUILD_PLAN.md Layer 1 'how we
-verify': 'FFmpeg transcode unit test on a 10s clip.' Storage (boto3/MinIO) is
-mocked to read/write local files instead, so this tests the actual subprocess
-logic without needing a live MinIO.
-"""
-
 import shutil
 import subprocess
 import sys
@@ -15,9 +8,6 @@ import pytest
 
 @pytest.fixture()
 def sample_video(tmp_path):
-    """A tiny real H.264 video generated with ffmpeg's test source — no binary
-    fixture file committed to the repo, and it's disposable/regenerable.
-    """
     if shutil.which("ffmpeg") is None:
         pytest.skip("ffmpeg is not installed")
 
@@ -36,9 +26,6 @@ def sample_video(tmp_path):
 
 @pytest.fixture()
 def fake_storage(monkeypatch, tmp_path, sample_video):
-    """Mocks app.storage's download/upload to operate on local files, and seeds
-    the fake 'original' object with our synthetic video.
-    """
     import app.storage as storage_module
 
     uploaded = {}

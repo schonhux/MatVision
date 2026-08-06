@@ -1,17 +1,7 @@
-"""
-Matches CRUD + presigned upload flow. Storage (boto3/MinIO) and the queue
-(dramatiq/redis) are mocked here — this suite tests API/DB logic, not
-infrastructure integration. Real storage+queue integration is exercised by
-`docker compose up` on the Mac per BUILD_PLAN.md's [sandbox] vs [Mac] split.
-"""
-
 import sys
 
 
 def _patch_storage_and_queue(monkeypatch, uploaded_keys=None):
-    """Mocks the two external dependencies matches.py touches: object storage
-    and the job queue. Returns a dict recording what was enqueued, for assertions.
-    """
     import app.storage as storage_module
     import app.routers.matches as matches_module
 
@@ -21,8 +11,6 @@ def _patch_storage_and_queue(monkeypatch, uploaded_keys=None):
     monkeypatch.setattr(storage_module, "presigned_put_url", lambda key, ct, **kw: f"https://fake-s3/{key}")
     monkeypatch.setattr(storage_module, "presigned_get_url", lambda key, **kw: f"https://fake-s3-get/{key}")
     monkeypatch.setattr(storage_module, "object_exists", lambda key: key in uploaded_keys)
-    # matches.py calls `storage.presigned_put_url` etc via `from app import storage` then `storage.x`,
-    # so patching the module's attributes (above) is what actually takes effect at call time.
 
     enqueued = {"pipeline": [], "clip": []}
     monkeypatch.setattr(
