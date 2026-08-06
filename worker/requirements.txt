@@ -1,0 +1,11 @@
+# MatVision worker — installs on top of api/app's own deps (copied into this image
+# at build time, see worker/Dockerfile). ffmpeg itself is a system package, installed
+# via apt in the Dockerfile, not pip.
+dramatiq[redis]>=1.17
+redis>=5.0
+sqlalchemy>=2.0
+psycopg2-binary>=2.9
+pydantic>=2.7
+pydantic-settings>=2.3
+boto3>=1.34
+ffmpeg-python>=0.2.0

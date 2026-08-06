@@ -40,7 +40,7 @@ The architecture leaves a clean seam for the Triage tier (a single `llm.triage()
 
 | Area | Choice | Notes |
 |---|---|---|
-| Frontend | Next.js 14 (App Router), TypeScript, Tailwind | Video dashboard, timeline, annotation, report |
+| Frontend | Next.js 16 (App Router), TypeScript, Tailwind | Video dashboard, timeline, annotation, report |
 | Video player | Plain `<video>` + custom canvas timeline | No heavyweight annotation lib (CVAT is overkill) |
 | Backend API | FastAPI, Pydantic v2, SQLAlchemy 2, Alembic | Async, migrations from day one |
 | Auth | Email/password, JWT, passlib+bcrypt | Simple, zero external dependency |
