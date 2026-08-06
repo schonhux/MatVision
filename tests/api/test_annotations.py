@@ -167,6 +167,90 @@ def test_state_segment_scoped_to_match(client, monkeypatch):
     assert client.get(f"/matches/{mid}/states", headers=hb).status_code == 404
 
 
+def _add_model_state(match_id, state="neutral", start_ms=0, end_ms=1000, confidence=0.8):
+    from app.database import SessionLocal
+    from app.models import MatchState, StateSegment
+
+    db = SessionLocal()
+    segment = StateSegment(
+        match_id=match_id,
+        state=MatchState(state),
+        start_ms=start_ms,
+        end_ms=end_ms,
+        confidence=confidence,
+        source="model:test-v1",
+    )
+    db.add(segment)
+    db.commit()
+    db.refresh(segment)
+    segment_id = segment.id
+    db.close()
+    return segment_id
+
+
+def test_state_source_filters_and_preferred_model(match):
+    client, headers, match_id = match
+    client.post(
+        f"/matches/{match_id}/states",
+        json={"state": "scramble", "start_ms": 0, "end_ms": 1000},
+        headers=headers,
+    )
+    _add_model_state(match_id, state="neutral")
+
+    human = client.get(f"/matches/{match_id}/states?source=human", headers=headers).json()
+    model = client.get(f"/matches/{match_id}/states?source=model", headers=headers).json()
+    preferred = client.get(f"/matches/{match_id}/states?source=preferred", headers=headers).json()
+    assert [item["source"] for item in human] == ["human"]
+    assert [item["source"] for item in model] == ["model:test-v1"]
+    assert preferred == model
+
+
+def test_state_summary_reports_duration_and_confidence(match):
+    client, headers, match_id = match
+    _add_model_state(match_id, state="neutral", start_ms=0, end_ms=3000, confidence=0.8)
+    _add_model_state(match_id, state="scramble", start_ms=3000, end_ms=4000, confidence=0.4)
+
+    summary = client.get(f"/matches/{match_id}/states/summary", headers=headers)
+    assert summary.status_code == 200, summary.text
+    body = summary.json()
+    assert body["source"] == "model:test-v1"
+    assert body["duration_ms_by_state"]["neutral"] == 3000
+    assert body["percentage_by_state"]["scramble"] == 25.0
+    assert body["mean_confidence"] == 0.6
+    assert body["low_confidence_count"] == 1
+
+
+def test_model_state_segments_are_read_only(match):
+    client, headers, match_id = match
+    segment_id = _add_model_state(match_id)
+    patched = client.patch(
+        f"/matches/{match_id}/states/{segment_id}",
+        json={"end_ms": 2000},
+        headers=headers,
+    )
+    deleted = client.delete(f"/matches/{match_id}/states/{segment_id}", headers=headers)
+    assert patched.status_code == 409
+    assert deleted.status_code == 409
+
+
+def test_model_state_does_not_make_annotation_complete(match):
+    client, headers, match_id = match
+    client.put(
+        f"/matches/{match_id}/athletes",
+        json={"role": "user", "athlete_name": "Schon"},
+        headers=headers,
+    )
+    _add_model_state(match_id)
+
+    response = client.patch(
+        f"/matches/{match_id}/annotation",
+        json={"annotation_complete": True},
+        headers=headers,
+    )
+    assert response.status_code == 422
+    assert "state" in response.json()["detail"].lower()
+
+
 # --- athlete identification ----------------------------------------------------
 
 def test_set_and_list_athletes(match):

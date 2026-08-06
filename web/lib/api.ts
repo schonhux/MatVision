@@ -243,8 +243,25 @@ export interface StateSegment {
   created_at: string;
 }
 
-export async function listStates(matchId: string) {
-  return request<StateSegment[]>(`/matches/${matchId}/states`);
+export async function listStates(
+  matchId: string,
+  source: "all" | "human" | "model" | "preferred" = "all"
+) {
+  return request<StateSegment[]>(`/matches/${matchId}/states?source=${source}`);
+}
+
+export interface StateSummary {
+  source: string | null;
+  segment_count: number;
+  total_duration_ms: number;
+  duration_ms_by_state: Record<StateName, number>;
+  percentage_by_state: Record<StateName, number>;
+  mean_confidence: number | null;
+  low_confidence_count: number;
+}
+
+export async function getStateSummary(matchId: string) {
+  return request<StateSummary>(`/matches/${matchId}/states/summary`);
 }
 
 export async function createState(

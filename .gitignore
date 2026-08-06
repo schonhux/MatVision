@@ -43,6 +43,7 @@ mlruns/
 *.pt
 *.onnx
 models/checkpoints/
+models/
 
 # Docker / local volumes
 .volumes/

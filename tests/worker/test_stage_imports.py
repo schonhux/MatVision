@@ -20,7 +20,7 @@ import pytest
 
 STAGE_MODULES = [
     "validate", "transcode", "clips",
-    "detect_track", "pose", "features",
+    "detect_track", "pose", "features", "states",
     "runner",
 ]
 
@@ -66,14 +66,10 @@ def test_pipeline_stages_match_available_stage_modules(merged_worker_app):
         assert callable(module.run)
 
 
-def test_layer3_stages_are_registered():
+def test_cv_stages_are_registered():
     """Layer 3 wired its stages into the pipeline — a guard against building stages
     that never actually get run.
     """
-    import importlib
-    import sys as _sys
-
-    # Import fresh via the merged app in the fixture-independent way used above.
     from app.models import PIPELINE_STAGES
 
     for expected in ("detect_track", "pose", "features"):
@@ -81,3 +77,4 @@ def test_layer3_stages_are_registered():
     # Order matters: features depends on pose, which depends on detect_track.
     assert PIPELINE_STAGES.index("detect_track") < PIPELINE_STAGES.index("pose")
     assert PIPELINE_STAGES.index("pose") < PIPELINE_STAGES.index("features")
+    assert PIPELINE_STAGES.index("features") < PIPELINE_STAGES.index("states")

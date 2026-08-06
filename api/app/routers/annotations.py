@@ -1,28 +1,24 @@
-"""
-Layer 2 annotation endpoints: match-state segments, athlete identification, and
-match-level annotation metadata (venue, completion flag).
+"""State annotations, athlete identification, and annotation metadata."""
 
-These are what turn the platform into the dataset-building tool described in
-PROJECT_GUIDE.md Layer 2 — "the product is the dataset tool." Layer 4's state
-classifier is trained against exactly the state_segments produced here.
-"""
+from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import User, StateSegment, MatchAthlete, MatchState
+from app.deps import get_current_user
+from app.models import MatchAthlete, MatchState, StateSegment, User
+from app.routers.matches import _get_owned_match
 from app.schemas import (
-    StateSegmentCreateRequest,
-    StateSegmentUpdateRequest,
-    StateSegmentResponse,
+    MatchAnnotationUpdate,
     MatchAthleteRequest,
     MatchAthleteResponse,
-    MatchAnnotationUpdate,
     MatchResponse,
+    StateSegmentCreateRequest,
+    StateSegmentResponse,
+    StateSegmentUpdateRequest,
+    StateSummaryResponse,
 )
-from app.deps import get_current_user
-from app.routers.matches import _get_owned_match
 
 router = APIRouter(prefix="/matches/{match_id}", tags=["annotations"])
 
@@ -57,16 +53,54 @@ def create_state_segment(
 @router.get("/states", response_model=list[StateSegmentResponse])
 def list_state_segments(
     match_id: str,
+    source: Literal["all", "human", "model", "preferred"] = Query("all"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     _get_owned_match(db, match_id, current_user)
-    return (
-        db.query(StateSegment)
-        .filter(StateSegment.match_id == match_id)
-        .order_by(StateSegment.start_ms.asc())
-        .all()
-    )
+    query = db.query(StateSegment).filter(StateSegment.match_id == match_id)
+    if source == "human":
+        query = query.filter(StateSegment.source == "human")
+    elif source == "model":
+        query = query.filter(StateSegment.source.like("model:%"))
+    elif source == "preferred":
+        has_model = db.query(StateSegment.id).filter(
+            StateSegment.match_id == match_id,
+            StateSegment.source.like("model:%"),
+        ).first()
+        query = query.filter(
+            StateSegment.source.like("model:%") if has_model else StateSegment.source == "human"
+        )
+    return query.order_by(StateSegment.start_ms.asc()).all()
+
+
+@router.get("/states/summary", response_model=StateSummaryResponse)
+def state_summary(
+    match_id: str,
+    source: Literal["human", "model", "preferred"] = Query("preferred"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    _get_owned_match(db, match_id, current_user)
+    segments = list_state_segments(match_id, source, db, current_user)
+    duration_by_state = {state.value: 0 for state in MatchState}
+    for segment in segments:
+        duration_by_state[segment.state.value] += segment.end_ms - segment.start_ms
+
+    total = sum(duration_by_state.values())
+    confidences = [segment.confidence for segment in segments if segment.confidence is not None]
+    return {
+        "source": segments[0].source if segments else None,
+        "segment_count": len(segments),
+        "total_duration_ms": total,
+        "duration_ms_by_state": duration_by_state,
+        "percentage_by_state": {
+            state: round(duration / total * 100, 1) if total else 0.0
+            for state, duration in duration_by_state.items()
+        },
+        "mean_confidence": round(sum(confidences) / len(confidences), 4) if confidences else None,
+        "low_confidence_count": sum(value < 0.55 for value in confidences),
+    }
 
 
 @router.patch("/states/{segment_id}", response_model=StateSegmentResponse)
@@ -79,6 +113,7 @@ def update_state_segment(
 ):
     _get_owned_match(db, match_id, current_user)
     segment = _get_segment_in_match(db, segment_id, match_id)
+    _require_human_segment(segment)
 
     updates = payload.model_dump(exclude_unset=True)
     new_start = updates.get("start_ms", segment.start_ms)
@@ -111,6 +146,7 @@ def delete_state_segment(
 ):
     _get_owned_match(db, match_id, current_user)
     segment = _get_segment_in_match(db, segment_id, match_id)
+    _require_human_segment(segment)
     db.delete(segment)
     db.commit()
 
@@ -201,7 +237,10 @@ def _annotation_readiness_problems(db: Session, match_id: str) -> list[str]:
     }
     if "user" not in athlete_roles:
         problems.append("the 'user' athlete has not been identified")
-    if not db.query(StateSegment).filter(StateSegment.match_id == match_id).first():
+    if not db.query(StateSegment).filter(
+        StateSegment.match_id == match_id,
+        StateSegment.source == "human",
+    ).first():
         problems.append("no match-state segments have been labeled")
     return problems
 
@@ -213,6 +252,11 @@ def _get_segment_in_match(db: Session, segment_id: str, match_id: str) -> StateS
     if segment is None or segment.match_id != match_id:
         raise HTTPException(404, "State segment not found")
     return segment
+
+
+def _require_human_segment(segment: StateSegment) -> None:
+    if segment.source != "human":
+        raise HTTPException(409, "Model predictions are read-only")
 
 
 def _reject_overlap(
