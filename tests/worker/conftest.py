@@ -21,10 +21,13 @@ def merged_worker_app(tmp_path, monkeypatch):
     merge_dir = tmp_path / "worker_merged"
     app_dir = merge_dir / "app"
     shutil.copytree(REPO_ROOT / "api" / "app", app_dir)
-    # worker/app's stages/ + tasks.py overlay onto the copied api/app, exactly as
-    # the two `COPY` instructions in worker/Dockerfile do.
+    # worker/app's stages/, vision/, and tasks.py overlay onto the copied api/app,
+    # exactly as the COPY instructions in worker/Dockerfile do.
     shutil.copytree(REPO_ROOT / "worker" / "app" / "stages", app_dir / "stages", dirs_exist_ok=True)
+    shutil.copytree(REPO_ROOT / "worker" / "app" / "vision", app_dir / "vision", dirs_exist_ok=True)
     shutil.copy(REPO_ROOT / "worker" / "app" / "tasks.py", app_dir / "tasks.py")
+    # Layer 3+ stages import the torch-free feature math from ml/.
+    shutil.copytree(REPO_ROOT / "ml", merge_dir / "ml", dirs_exist_ok=True)
     # API-only modules the worker image deliberately excludes (Dockerfile `rm -rf`).
     for name in ["routers", "main.py", "security.py", "schemas.py", "deps.py", "queue.py"]:
         target = app_dir / name

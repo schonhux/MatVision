@@ -16,9 +16,13 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Shared DB models/config/storage from the API package...
 COPY api/app ./app
-# ...merged with worker-specific stage/task code (adds app/stages/, app/tasks.py;
-# does not remove anything the previous COPY placed).
+# ...merged with worker-specific stage/task code (adds app/stages/, app/vision/,
+# app/tasks.py; does not remove anything the previous COPY placed).
 COPY worker/app ./app
+
+# Layer 3+ stages import the torch-free feature math from ml/ (wrestling_features,
+# identity, splits). Copied whole so the same code runs in the worker and in tests.
+COPY ml ./ml
 
 # api/app also contains routers/, main.py, security.py, schemas.py, deps.py,
 # queue.py — none of which the worker needs or should import. Removing them keeps
