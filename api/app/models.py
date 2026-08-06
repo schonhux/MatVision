@@ -224,7 +224,10 @@ class MatchAthlete(Base):
 PIPELINE_STAGES: list[str] = [
     "validate",
     "transcode",
-    # Layer 3+: "detect_track", "pose", "features"
+    # Layer 3 — computer vision
+    "detect_track",
+    "pose",
+    "features",
     # Layer 4:  "states"
     # Layer 5:  "events", "consolidate", "clips"
     # Layer 6:  "stats", "observations", "report"

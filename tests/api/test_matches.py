@@ -100,7 +100,12 @@ def test_complete_upload_creates_jobs_and_enqueues(signed_up_user, monkeypatch):
 
     jobs_resp = client.get(f"/matches/{match_id}/jobs", headers=headers)
     stages = [j["stage"] for j in jobs_resp.json()]
-    assert stages == ["validate", "transcode"]
+
+    # Assert against PIPELINE_STAGES rather than a hardcoded list — every layer adds
+    # stages, and this test should verify "a job row exists per stage, in order",
+    # not re-encode the pipeline definition (which would break on every layer).
+    from app.models import PIPELINE_STAGES
+    assert stages == PIPELINE_STAGES
     assert all(j["status"] == "pending" for j in jobs_resp.json())
 
 
