@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import auth, matches, jobs, events
+from app.routers import auth, matches, jobs, events, annotations, datasets
 
 app = FastAPI(
     title="MatVision API",
@@ -21,6 +21,8 @@ app.include_router(auth.router)
 app.include_router(matches.router)
 app.include_router(jobs.router)
 app.include_router(events.router)
+app.include_router(annotations.router)
+app.include_router(datasets.router)
 
 
 @app.get("/health")
