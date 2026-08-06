@@ -87,6 +87,9 @@ export default function DashboardPage() {
               className="hidden"
             />
           </label>
+          <Link href="/dataset" className="text-sm text-neutral-400 hover:text-neutral-200">
+            Dataset
+          </Link>
           <button onClick={handleLogout} className="text-sm text-neutral-400 hover:text-neutral-200">
             Log out
           </button>

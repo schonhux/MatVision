@@ -1,7 +1,11 @@
 # ---- MatVision .gitignore ----
 
-# Local-only project documentation — NEVER pushed
+# Local-only planning & project documentation — NEVER pushed
 dev/
+SPEC.md
+PROJECT_GUIDE.md
+BUILD_PLAN.md
+*.docx
 
 # OS
 .DS_Store
@@ -16,8 +20,6 @@ Thumbs.db
 # Python
 __pycache__/
 *.py[cod]
-*.db
-*.db-journal
 .venv/
 venv/
 .pytest_cache/

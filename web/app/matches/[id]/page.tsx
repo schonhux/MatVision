@@ -172,7 +172,15 @@ export default function MatchDetailPage() {
       <Link href="/dashboard" className="text-sm text-neutral-400 hover:text-neutral-200">
         &larr; Back to matches
       </Link>
-      <h1 className="mt-2 mb-6 text-2xl font-semibold">{match.title}</h1>
+      <div className="mt-2 mb-6 flex items-center justify-between">
+        <h1 className="text-2xl font-semibold">{match.title}</h1>
+        <Link
+          href={`/matches/${matchId}/annotate`}
+          className="rounded bg-neutral-100 px-4 py-2 text-sm font-medium text-neutral-900"
+        >
+          Open annotation console
+        </Link>
+      </div>
 
       {error && (
         <p className="mb-4 rounded bg-red-950 border border-red-800 px-3 py-2 text-sm text-red-300">
