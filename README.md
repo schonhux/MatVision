@@ -26,6 +26,4 @@ video
 - **Computer vision:** pretrained detection and pose-estimation models, plus a lightweight custom model for recognizing match states.
 - **Report generation:** Claude API, constrained to only describe facts it's given.
 
-## Status
 
-In active development. See `PROJECT_GUIDE.md` for the full technical writeup and `BUILD_PLAN.md` for how it's being built and tested.
