@@ -293,3 +293,77 @@ class MatchAthleteResponse(BaseModel):
 class MatchAnnotationUpdate(BaseModel):
     venue: str | None = None
     annotation_complete: bool | None = None
+
+
+# --- Layer 6: stats, observations, report --------------------------------------
+
+class AthleteMatchStats(BaseModel):
+    shot_attempts: int
+    takedowns: int
+    defended_shots: int
+    conversion_rate: float | None
+    escapes: int
+    takedowns_conceded: int
+
+
+class MatchStatsResponse(BaseModel):
+    total_duration_ms: int
+    duration_ms_by_state: dict[str, int]
+    control_time_ms: dict[str, int]
+    scramble_count: int
+    longest_scramble_ms: int
+    restarts: int
+    by_athlete: dict[str, AthleteMatchStats]
+
+
+class ObservationResponse(BaseModel):
+    id: str
+    match_id: str
+    type: str
+    summary: str
+    evidence_event_ids: list[str]
+    stats: dict
+    source: str
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+ReportStatementKind = Literal["observation", "interpretation"]
+
+
+class ReportStatement(BaseModel):
+    text: str
+    kind: ReportStatementKind = "observation"
+    evidence_event_ids: list[str] = Field(default_factory=list)
+
+
+class ReportPriority(BaseModel):
+    text: str
+    evidence_event_ids: list[str] = Field(default_factory=list)
+
+
+class ReportContent(BaseModel):
+    summary: str = ""
+    statements: list[ReportStatement] = Field(default_factory=list)
+    priority: ReportPriority | None = None
+    dropped_statement_count: int = 0
+
+
+class ReportResponse(BaseModel):
+    id: str
+    match_id: str
+    content: ReportContent
+    model_version: str
+    coach_tone: str
+    ratings: dict
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class ReportRatingRequest(BaseModel):
+    evidence_validity: int = Field(ge=1, le=5)
+    usefulness: int | None = Field(default=None, ge=1, le=5)
+    note: str | None = Field(default=None, max_length=1000)

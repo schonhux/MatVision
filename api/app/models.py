@@ -74,6 +74,9 @@ class Match(Base):
     # Marks a match as fully labeled and eligible for export into the training set.
     annotation_complete: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     coach_tone: Mapped[str] = mapped_column(String, default="balanced", nullable=False)
+    # Layer 6: cached output of the STATS stage (ml/reporting/stats.py), so the API
+    # can serve match statistics without recomputing them on every request.
+    stats_summary: Mapped[dict] = mapped_column(JSON, default=dict)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     updated_at: Mapped[datetime] = mapped_column(
@@ -88,6 +91,12 @@ class Match(Base):
     )
     athletes: Mapped[list["MatchAthlete"]] = relationship(
         back_populates="match", cascade="all, delete-orphan"
+    )
+    observations: Mapped[list["Observation"]] = relationship(
+        back_populates="match", cascade="all, delete-orphan"
+    )
+    report: Mapped["Report | None"] = relationship(
+        back_populates="match", cascade="all, delete-orphan", uselist=False
     )
 
 
@@ -255,6 +264,55 @@ class MatchAthlete(Base):
     match: Mapped["Match"] = relationship(back_populates="athletes")
 
 
+class Observation(Base):
+    """A rule-detected pattern over a match's events/stats (Layer 6 OBSERVATIONS
+    stage, ml/reporting/observations.py). `evidence_event_ids` links back to real
+    Event rows — the beginning of the evidence graph described in SPEC.md section
+    4 ("Evidence graph = these relations. No graph DB.").
+    """
+    __tablename__ = "observations"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    match_id: Mapped[str] = mapped_column(ForeignKey("matches.id"), nullable=False, index=True)
+
+    type: Mapped[str] = mapped_column(String, nullable=False)
+    summary: Mapped[str] = mapped_column(Text, nullable=False)
+    evidence_event_ids: Mapped[list] = mapped_column(JSON, default=list)
+    stats: Mapped[dict] = mapped_column(JSON, default=dict)
+    source: Mapped[str] = mapped_column(String, default="model:rules-v1", nullable=False)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+    match: Mapped["Match"] = relationship(back_populates="observations")
+
+
+class Report(Base):
+    """The grounded coach's note (Layer 6 REPORT stage). One row per match — the
+    stage upserts rather than versioning, since a corrected event set makes the
+    previous report stale rather than historically interesting. `content` holds
+    the validated {summary, statements[], priority, dropped_statement_count}
+    shape produced by ml/reporting/llm.validate_report.
+    """
+    __tablename__ = "reports"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    match_id: Mapped[str] = mapped_column(
+        ForeignKey("matches.id"), nullable=False, unique=True, index=True
+    )
+
+    content: Mapped[dict] = mapped_column(JSON, default=dict)
+    model_version: Mapped[str] = mapped_column(String, nullable=False)
+    coach_tone: Mapped[str] = mapped_column(String, nullable=False)
+    ratings: Mapped[dict] = mapped_column(JSON, default=dict)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
+    )
+
+    match: Mapped["Match"] = relationship(back_populates="report")
+
+
 PIPELINE_STAGES: list[str] = [
     "validate",
     "transcode",
@@ -266,5 +324,8 @@ PIPELINE_STAGES: list[str] = [
     "events",
     "consolidate",
     "clips",
-    # Layer 6:  "stats", "observations", "report"
+    # Layer 6 — evidence graph + grounded report
+    "stats",
+    "observations",
+    "report",
 ]

@@ -21,10 +21,11 @@ import pytest
 STAGE_MODULES = [
     "validate", "transcode", "clips",
     "detect_track", "pose", "features", "states", "events", "consolidate",
+    "stats", "observations", "report",
     "runner",
 ]
 
-HEAVY_MODULES = ["torch", "ultralytics", "torchvision"]
+HEAVY_MODULES = ["torch", "ultralytics", "torchvision", "anthropic"]
 
 
 @pytest.mark.parametrize("stage", STAGE_MODULES)
@@ -81,3 +82,16 @@ def test_cv_stages_are_registered():
     assert PIPELINE_STAGES.index("states") < PIPELINE_STAGES.index("events")
     assert PIPELINE_STAGES.index("events") < PIPELINE_STAGES.index("consolidate")
     assert PIPELINE_STAGES.index("consolidate") < PIPELINE_STAGES.index("clips")
+
+
+def test_report_stages_are_registered():
+    """Layer 6 wired stats -> observations -> report into the pipeline, in that
+    order — each stage reads what the previous one persisted.
+    """
+    from app.models import PIPELINE_STAGES
+
+    for expected in ("stats", "observations", "report"):
+        assert expected in PIPELINE_STAGES, f"{expected} missing from PIPELINE_STAGES"
+    assert PIPELINE_STAGES.index("events") < PIPELINE_STAGES.index("stats")
+    assert PIPELINE_STAGES.index("stats") < PIPELINE_STAGES.index("observations")
+    assert PIPELINE_STAGES.index("observations") < PIPELINE_STAGES.index("report")

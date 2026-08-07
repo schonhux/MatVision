@@ -398,4 +398,94 @@ export async function exportDataset(seed = 42) {
   return request<Record<string, unknown>>(`/datasets/export?seed=${seed}`);
 }
 
+// --- Layer 6: stats, observations, report -----------------------------------
+
+export interface AthleteMatchStats {
+  shot_attempts: number;
+  takedowns: number;
+  defended_shots: number;
+  conversion_rate: number | null;
+  escapes: number;
+  takedowns_conceded: number;
+}
+
+export interface MatchStats {
+  total_duration_ms: number;
+  duration_ms_by_state: Record<string, number>;
+  control_time_ms: Record<string, number>;
+  scramble_count: number;
+  longest_scramble_ms: number;
+  restarts: number;
+  by_athlete: Record<"user" | "opponent", AthleteMatchStats>;
+}
+
+export async function getMatchStats(matchId: string) {
+  return request<MatchStats>(`/matches/${matchId}/stats`);
+}
+
+export interface MatchObservation {
+  id: string;
+  match_id: string;
+  type: string;
+  summary: string;
+  evidence_event_ids: string[];
+  stats: Record<string, unknown>;
+  source: string;
+  created_at: string;
+}
+
+export async function listObservations(matchId: string) {
+  return request<MatchObservation[]>(`/matches/${matchId}/observations`);
+}
+
+export interface ReportStatement {
+  text: string;
+  kind: "observation" | "interpretation";
+  evidence_event_ids: string[];
+}
+
+export interface ReportPriority {
+  text: string;
+  evidence_event_ids: string[];
+}
+
+export interface ReportContent {
+  summary: string;
+  statements: ReportStatement[];
+  priority: ReportPriority | null;
+  dropped_statement_count: number;
+}
+
+export interface MatchReport {
+  id: string;
+  match_id: string;
+  content: ReportContent;
+  model_version: string;
+  coach_tone: string;
+  ratings: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function getReport(matchId: string) {
+  return request<MatchReport>(`/matches/${matchId}/report`);
+}
+
+export async function rateReport(
+  matchId: string,
+  rating: { evidence_validity: number; usefulness?: number; note?: string }
+) {
+  return request<MatchReport>(`/matches/${matchId}/report/rating`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(rating),
+  });
+}
+
+export async function regenerateReport(matchId: string) {
+  return request<{ status: string; stages: string[] }>(`/matches/${matchId}/report/regenerate`, {
+    method: "POST",
+  });
+}
+
 export { API_URL, ApiError };

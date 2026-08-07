@@ -15,9 +15,14 @@ import {
   getClipUrl,
   getToken,
   updateMatchSettings,
+  getReport,
+  rateReport,
+  regenerateReport,
+  ApiError,
   Match,
   Job,
   MatchEvent,
+  MatchReport,
   StateName,
   StateSegment,
   StateSummary,
@@ -68,6 +73,8 @@ export default function MatchDetailPage() {
   const [events, setEvents] = useState<MatchEvent[]>([]);
   const [states, setStates] = useState<StateSegment[]>([]);
   const [stateSummary, setStateSummary] = useState<StateSummary | null>(null);
+  const [report, setReport] = useState<MatchReport | null>(null);
+  const [reportPending, setReportPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Manual tagging form state
@@ -90,6 +97,14 @@ export default function MatchDetailPage() {
       setEvents(e);
       setStates(s);
       setStateSummary(summary);
+
+      try {
+        setReport(await getReport(matchId));
+      } catch (err) {
+        if (!(err instanceof ApiError && err.status === 404)) throw err;
+        setReport(null);
+      }
+      setReportPending(false);
 
       if (m.video_keys.original || m.video_keys.analysis_720p) {
         try {
@@ -185,6 +200,33 @@ export default function MatchDetailPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Clip not ready yet");
     }
+  }
+
+  async function handleRegenerateReport() {
+    try {
+      setReportPending(true);
+      await regenerateReport(matchId);
+      setTimeout(refresh, 4000);
+      setTimeout(refresh, 10000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to regenerate report");
+      setReportPending(false);
+    }
+  }
+
+  async function handleRateReport(evidenceValidity: number) {
+    try {
+      const updated = await rateReport(matchId, { evidence_validity: evidenceValidity });
+      setReport(updated);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save rating");
+    }
+  }
+
+  function evidenceTimestamps(ids: string[]): number[] {
+    return ids
+      .map((id) => events.find((ev) => ev.id === id)?.start_ms)
+      .filter((ms): ms is number => ms !== undefined);
   }
 
   if (!match) {
@@ -424,6 +466,104 @@ export default function MatchDetailPage() {
               </li>
             ))}
           </ul>
+        )}
+      </section>
+
+      {/* Coach report */}
+      <section className="mt-6 border-t border-neutral-800 pt-6">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="font-medium">Coach report</h2>
+          <button
+            type="button"
+            onClick={handleRegenerateReport}
+            disabled={reportPending}
+            className="rounded bg-neutral-800 px-3 py-1.5 text-xs hover:bg-neutral-700 disabled:opacity-50"
+          >
+            {reportPending ? "Regenerating..." : "Regenerate report"}
+          </button>
+        </div>
+
+        {!report ? (
+          <p className="text-sm text-neutral-500">
+            {isProcessing
+              ? "Report will appear once processing finishes."
+              : "No report yet. Click \"Regenerate report\" once events look right."}
+          </p>
+        ) : (
+          <div className="space-y-4 rounded border border-neutral-800 bg-neutral-900 p-4">
+            <p className="text-sm text-neutral-300">{report.content.summary}</p>
+
+            <ul className="space-y-3">
+              {report.content.statements.map((statement, index) => (
+                <li key={index} className="text-sm">
+                  <span
+                    className={
+                      statement.kind === "interpretation"
+                        ? "text-amber-400 text-xs uppercase tracking-wide"
+                        : "text-neutral-500 text-xs uppercase tracking-wide"
+                    }
+                  >
+                    {statement.kind}
+                  </span>
+                  <p className="mt-0.5">{statement.text}</p>
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {evidenceTimestamps(statement.evidence_event_ids).map((ms) => (
+                      <button
+                        key={ms}
+                        onClick={() => seekTo(ms)}
+                        className="rounded bg-neutral-800 px-2 py-0.5 font-mono text-xs text-neutral-400 hover:bg-neutral-700 hover:text-neutral-100"
+                      >
+                        {formatMs(ms)}
+                      </button>
+                    ))}
+                  </div>
+                </li>
+              ))}
+            </ul>
+
+            {report.content.priority && (
+              <div className="rounded border border-neutral-700 bg-neutral-950 p-3">
+                <p className="text-xs uppercase tracking-wide text-neutral-500">Priority</p>
+                <p className="mt-0.5 text-sm font-medium">{report.content.priority.text}</p>
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {evidenceTimestamps(report.content.priority.evidence_event_ids).map((ms) => (
+                    <button
+                      key={ms}
+                      onClick={() => seekTo(ms)}
+                      className="rounded bg-neutral-800 px-2 py-0.5 font-mono text-xs text-neutral-400 hover:bg-neutral-700 hover:text-neutral-100"
+                    >
+                      {formatMs(ms)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="flex items-center justify-between border-t border-neutral-800 pt-3">
+              <span className="text-xs text-neutral-600">
+                {report.model_version} &middot; {report.coach_tone} tone
+                {report.content.dropped_statement_count > 0 &&
+                  ` · ${report.content.dropped_statement_count} unsupported statement(s) filtered`}
+              </span>
+              <div className="flex items-center gap-1">
+                <span className="text-xs text-neutral-500">Rate:</span>
+                {[1, 2, 3, 4, 5].map((score) => (
+                  <button
+                    key={score}
+                    onClick={() => handleRateReport(score)}
+                    className={`text-sm ${
+                      (report.ratings.evidence_validity as number | undefined) === score
+                        ? "text-yellow-400"
+                        : "text-neutral-600 hover:text-neutral-300"
+                    }`}
+                    aria-label={`Rate evidence validity ${score}`}
+                  >
+                    &#9733;
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
         )}
       </section>
     </main>
