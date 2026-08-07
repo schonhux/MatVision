@@ -78,11 +78,12 @@ export default function DatasetPage() {
             </div>
           </section>
 
-          <section className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <section className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-5">
             {[
               ["Matches", stats.total_matches],
               ["Annotated", stats.annotated_matches],
               ["Events", stats.total_events],
+              ["Corrections", stats.total_corrections],
               ["Minutes labeled", stats.labeled_minutes],
             ].map(([label, value]) => (
               <div key={label as string} className="rounded border border-neutral-800 bg-neutral-900 p-3">

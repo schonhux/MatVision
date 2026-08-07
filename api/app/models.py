@@ -2,7 +2,17 @@ import enum
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import String, DateTime, ForeignKey, Enum, Integer, JSON, Text, Float, Boolean
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    DateTime,
+    Enum,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -63,6 +73,7 @@ class Match(Base):
     venue: Mapped[str | None] = mapped_column(String, nullable=True)
     # Marks a match as fully labeled and eligible for export into the training set.
     annotation_complete: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    coach_tone: Mapped[str] = mapped_column(String, default="balanced", nullable=False)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     updated_at: Mapped[datetime] = mapped_column(
@@ -116,9 +127,13 @@ class Event(Base):
 
     type: Mapped[str] = mapped_column(String, nullable=False)
     start_ms: Mapped[int] = mapped_column(Integer, nullable=False)
+    peak_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     end_ms: Mapped[int] = mapped_column(Integer, nullable=False)
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
     source: Mapped[str] = mapped_column(String, default="human")
+    confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    measurements: Mapped[dict] = mapped_column(JSON, default=dict)
+    review_status: Mapped[str] = mapped_column(String, default="confirmed", nullable=False)
 
     # --- Layer 2 annotation fields ---------------------------------------
     # Level 1 labels (see PROJECT_GUIDE.md Section 8, Layer 2 "annotation levels").
@@ -151,6 +166,25 @@ class Event(Base):
     )
 
     match: Mapped["Match"] = relationship(back_populates="events")
+    corrections: Mapped[list["Correction"]] = relationship(
+        back_populates="event", cascade="all, delete-orphan"
+    )
+
+
+class Correction(Base):
+    __tablename__ = "corrections"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    event_id: Mapped[str] = mapped_column(ForeignKey("events.id"), nullable=False, index=True)
+    corrected_by: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    field: Mapped[str] = mapped_column(String, nullable=False)
+    old_value: Mapped[object | None] = mapped_column(JSON, nullable=True)
+    new_value: Mapped[object | None] = mapped_column(JSON, nullable=True)
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    use_for_training: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+    event: Mapped["Event"] = relationship(back_populates="corrections")
 
 
 class MatchState(str, enum.Enum):
@@ -229,6 +263,8 @@ PIPELINE_STAGES: list[str] = [
     "pose",
     "features",
     "states",
-    # Layer 5:  "events", "consolidate", "clips"
+    "events",
+    "consolidate",
+    "clips",
     # Layer 6:  "stats", "observations", "report"
 ]

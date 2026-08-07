@@ -90,6 +90,7 @@ export interface Match {
   video_keys: Record<string, string>;
   venue: string | null;
   annotation_complete: boolean;
+  coach_tone: "balanced" | "hard" | "extreme";
   created_at: string;
   updated_at: string;
 }
@@ -100,6 +101,17 @@ export async function listMatches() {
 
 export async function getMatch(matchId: string) {
   return request<Match>(`/matches/${matchId}`);
+}
+
+export async function updateMatchSettings(
+  matchId: string,
+  updates: { coach_tone: "balanced" | "hard" | "extreme" }
+) {
+  return request<Match>(`/matches/${matchId}/settings`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(updates),
+  });
 }
 
 export async function getVideoUrl(matchId: string) {
@@ -157,9 +169,13 @@ export interface MatchEvent {
   match_id: string;
   type: string;
   start_ms: number;
+  peak_ms: number | null;
   end_ms: number;
   note: string | null;
   source: string;
+  confidence: number | null;
+  measurements: Record<string, number>;
+  review_status: "unreviewed" | "confirmed" | "corrected" | "rejected";
   // Layer 2 annotation labels
   initiator: "user" | "opponent" | null;
   outcome: "successful" | "failed" | "countered" | "stalemate" | null;
@@ -173,8 +189,14 @@ export interface MatchEvent {
   created_at: string;
 }
 
-export async function listEvents(matchId: string) {
-  return request<MatchEvent[]>(`/matches/${matchId}/events`);
+export async function listEvents(
+  matchId: string,
+  source: "all" | "human" | "model" | "preferred" = "all",
+  includeRejected = false
+) {
+  return request<MatchEvent[]>(
+    `/matches/${matchId}/events?source=${source}&include_rejected=${includeRejected}`
+  );
 }
 
 export async function createEvent(
@@ -217,12 +239,32 @@ export interface EventLabels {
 export async function updateEvent(
   matchId: string,
   eventId: string,
-  updates: Partial<{ type: string; start_ms: number; end_ms: number; note: string }> & EventLabels
+  updates: Partial<{
+    type: string;
+    start_ms: number;
+    end_ms: number;
+    note: string;
+    reason: string;
+    use_for_training: boolean;
+  }> & EventLabels
 ) {
   return request<MatchEvent>(`/matches/${matchId}/events/${eventId}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(updates),
+  });
+}
+
+export async function reviewEvent(
+  matchId: string,
+  eventId: string,
+  status: "confirmed" | "rejected",
+  reason?: string
+) {
+  return request<MatchEvent>(`/matches/${matchId}/events/${eventId}/review`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ status, reason, use_for_training: true }),
   });
 }
 
@@ -341,6 +383,7 @@ export interface DatasetStats {
   annotated_matches: number;
   total_events: number;
   total_state_segments: number;
+  total_corrections: number;
   labeled_minutes: number;
   events_by_type: Record<string, number>;
   states_by_type: Record<string, number>;

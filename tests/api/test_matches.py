@@ -13,7 +13,6 @@ def _patch_storage_and_queue(monkeypatch, uploaded_keys=None):
     and the job queue. Returns a dict recording what was enqueued, for assertions.
     """
     import app.storage as storage_module
-    import app.routers.matches as matches_module
 
     uploaded_keys = uploaded_keys if uploaded_keys is not None else set()
 
@@ -163,3 +162,29 @@ def test_video_url_uses_analysis_copy_when_available(signed_up_user, monkeypatch
     resp = client.get(f"/matches/{match_id}/video-url", headers=headers)
     assert resp.status_code == 200
     assert resp.json()["source"] == "original"  # no analysis_720p yet
+
+
+def test_match_coach_tone_setting(signed_up_user, monkeypatch):
+    client, headers = signed_up_user
+    _patch_storage_and_queue(monkeypatch)
+    created = client.post(
+        "/matches",
+        json={"title": "x", "filename": "match.mp4", "content_type": "video/mp4", "size_bytes": 1000},
+        headers=headers,
+    ).json()
+    match_id = created["match_id"]
+
+    updated = client.patch(
+        f"/matches/{match_id}/settings",
+        json={"coach_tone": "extreme"},
+        headers=headers,
+    )
+    assert updated.status_code == 200
+    assert updated.json()["coach_tone"] == "extreme"
+
+    invalid = client.patch(
+        f"/matches/{match_id}/settings",
+        json={"coach_tone": "unhinged"},
+        headers=headers,
+    )
+    assert invalid.status_code == 422
