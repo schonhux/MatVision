@@ -20,7 +20,7 @@ import pytest
 
 STAGE_MODULES = [
     "validate", "transcode", "clips",
-    "detect_track", "pose", "features", "states",
+    "detect_track", "pose", "features", "states", "events", "consolidate",
     "runner",
 ]
 
@@ -72,9 +72,12 @@ def test_cv_stages_are_registered():
     """
     from app.models import PIPELINE_STAGES
 
-    for expected in ("detect_track", "pose", "features"):
+    for expected in ("detect_track", "pose", "features", "states", "events", "consolidate", "clips"):
         assert expected in PIPELINE_STAGES, f"{expected} missing from PIPELINE_STAGES"
     # Order matters: features depends on pose, which depends on detect_track.
     assert PIPELINE_STAGES.index("detect_track") < PIPELINE_STAGES.index("pose")
     assert PIPELINE_STAGES.index("pose") < PIPELINE_STAGES.index("features")
     assert PIPELINE_STAGES.index("features") < PIPELINE_STAGES.index("states")
+    assert PIPELINE_STAGES.index("states") < PIPELINE_STAGES.index("events")
+    assert PIPELINE_STAGES.index("events") < PIPELINE_STAGES.index("consolidate")
+    assert PIPELINE_STAGES.index("consolidate") < PIPELINE_STAGES.index("clips")

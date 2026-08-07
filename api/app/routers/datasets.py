@@ -17,20 +17,26 @@ from sqlalchemy.orm import Session
 
 # ml/ lives at the repo root, outside the api package.
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
-from ml.datasets.splits import (  # noqa: E402
+from app.database import get_db
+from app.deps import get_current_user
+from app.models import (
+    Correction,
+    Event,
+    Match,
+    MatchAthlete,
+    StateSegment,
+    User,
+)
+from ml.datasets.splits import (
     MatchRecord,
     assign_splits,
-    verify_no_leakage,
     split_summary,
+    verify_no_leakage,
 )
-
-from app.database import get_db  # noqa: E402
-from app.models import User, Match, Event, StateSegment, MatchAthlete  # noqa: E402
-from app.deps import get_current_user  # noqa: E402
 
 router = APIRouter(prefix="/datasets", tags=["datasets"])
 
-DATASET_SCHEMA_VERSION = "1.0"
+DATASET_SCHEMA_VERSION = "1.1"
 
 
 @router.get("/export")
@@ -89,6 +95,17 @@ def export_dataset(
     exported_matches = []
     for m in matches:
         events = db.query(Event).filter(Event.match_id == m.id).order_by(Event.start_ms).all()
+        event_ids = [event.id for event in events]
+        corrections = (
+            db.query(Correction)
+            .filter(Correction.event_id.in_(event_ids))
+            .order_by(Correction.created_at)
+            .all()
+            if event_ids else []
+        )
+        corrections_by_event: dict[str, list[Correction]] = {}
+        for correction in corrections:
+            corrections_by_event.setdefault(correction.event_id, []).append(correction)
         states = (
             db.query(StateSegment)
             .filter(StateSegment.match_id == m.id, StateSegment.source == "human")
@@ -128,6 +145,7 @@ def export_dataset(
                     "event_id": e.id,
                     "type": e.type,
                     "start_ms": e.start_ms,
+                    "peak_ms": e.peak_ms,
                     "end_ms": e.end_ms,
                     "initiator": e.initiator,
                     "outcome": e.outcome,
@@ -137,6 +155,19 @@ def export_dataset(
                     "technique": e.technique,
                     "detail": e.detail,
                     "source": e.source,
+                    "confidence": e.confidence,
+                    "measurements": e.measurements,
+                    "review_status": e.review_status,
+                    "corrections": [
+                        {
+                            "field": correction.field,
+                            "old_value": correction.old_value,
+                            "new_value": correction.new_value,
+                            "reason": correction.reason,
+                            "use_for_training": correction.use_for_training,
+                        }
+                        for correction in corrections_by_event.get(e.id, [])
+                    ],
                 }
                 for e in events
             ],
@@ -155,6 +186,11 @@ def export_dataset(
             "match_count": len(matches),
             "split_counts": split_summary(assignment),
             "event_count": sum(len(m["events"]) for m in exported_matches),
+            "correction_count": sum(
+                len(event["corrections"])
+                for match in exported_matches
+                for event in match["events"]
+            ),
             "state_segment_count": sum(len(m["state_segments"]) for m in exported_matches),
         },
         "matches": exported_matches,
@@ -175,6 +211,7 @@ def dataset_stats(
 
     total_events = 0
     total_states = 0
+    total_corrections = 0
     labeled_duration_ms = 0
     events_by_type: dict[str, int] = {}
     states_by_type: dict[str, int] = {}
@@ -187,6 +224,12 @@ def dataset_stats(
             .all()
         )
         total_events += len(events)
+        event_ids = [event.id for event in events]
+        if event_ids:
+            total_corrections += db.query(Correction).filter(
+                Correction.event_id.in_(event_ids),
+                Correction.use_for_training.is_(True),
+            ).count()
         total_states += len(states)
         for e in events:
             events_by_type[e.type] = events_by_type.get(e.type, 0) + 1
@@ -200,6 +243,7 @@ def dataset_stats(
         "annotated_matches": len(complete),
         "total_events": total_events,
         "total_state_segments": total_states,
+        "total_corrections": total_corrections,
         "labeled_minutes": round(labeled_duration_ms / 60000, 1),
         "events_by_type": events_by_type,
         "states_by_type": states_by_type,

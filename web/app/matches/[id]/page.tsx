@@ -14,6 +14,7 @@ import {
   cutClip,
   getClipUrl,
   getToken,
+  updateMatchSettings,
   Match,
   Job,
   MatchEvent,
@@ -30,7 +31,7 @@ const STAGE_LABELS: Record<string, string> = {
   features: "Computing features",
   states: "Classifying match states",
   events: "Detecting scoring events",
-  consolidate: "Comparing techniques",
+  consolidate: "Cleaning event detections",
   clips: "Generating clips",
   stats: "Building statistics",
   observations: "Finding patterns",
@@ -38,6 +39,7 @@ const STAGE_LABELS: Record<string, string> = {
 };
 
 const EVENT_TYPES = ["shot_attempt", "takedown", "escape", "reversal", "restart", "other"];
+const COACH_TONES = ["balanced", "hard", "extreme"] as const;
 
 const STATE_STYLES: Record<StateName, string> = {
   neutral: "bg-cyan-600 hover:bg-cyan-500",
@@ -79,7 +81,7 @@ export default function MatchDetailPage() {
       const [m, j, e, s, summary] = await Promise.all([
         getMatch(matchId),
         listJobs(matchId),
-        listEvents(matchId),
+        listEvents(matchId, "preferred"),
         listStates(matchId, "preferred"),
         getStateSummary(matchId),
       ]);
@@ -157,6 +159,15 @@ export default function MatchDetailPage() {
     }
   }
 
+  async function setCoachTone(tone: (typeof COACH_TONES)[number]) {
+    try {
+      const updated = await updateMatchSettings(matchId, { coach_tone: tone });
+      setMatch(updated);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update coach analysis");
+    }
+  }
+
   async function handleCutClip(eventId: string) {
     try {
       await cutClip(matchId, eventId);
@@ -206,6 +217,29 @@ export default function MatchDetailPage() {
           Open annotation console
         </Link>
       </div>
+
+      <section className="mb-6 border-y border-neutral-800 py-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <span className="text-sm font-medium">Coach analysis</span>
+          <div className="inline-flex rounded border border-neutral-700 p-0.5" role="group" aria-label="Coach analysis intensity">
+            {COACH_TONES.map((tone) => (
+              <button
+                key={tone}
+                type="button"
+                onClick={() => setCoachTone(tone)}
+                className={`px-3 py-1.5 text-xs capitalize ${
+                  match.coach_tone === tone
+                    ? "bg-neutral-100 text-neutral-900"
+                    : "text-neutral-400 hover:text-neutral-100"
+                }`}
+                aria-pressed={match.coach_tone === tone}
+              >
+                {tone}
+              </button>
+            ))}
+          </div>
+        </div>
+      </section>
 
       {error && (
         <p className="mb-4 rounded bg-red-950 border border-red-800 px-3 py-2 text-sm text-red-300">
@@ -365,6 +399,11 @@ export default function MatchDetailPage() {
                 <button onClick={() => seekTo(ev.start_ms)} className="text-left hover:text-neutral-300">
                   <span className="font-mono text-sm text-neutral-500">{formatMs(ev.start_ms)}</span>{" "}
                   <span className="font-medium">{ev.type.replace("_", " ")}</span>
+                  {ev.confidence !== null && (
+                    <span className="ml-2 text-xs text-neutral-600">
+                      {Math.round(ev.confidence * 100)}%
+                    </span>
+                  )}
                   {ev.note && <span className="text-neutral-500"> — {ev.note}</span>}
                 </button>
                 {ev.clip_key ? (

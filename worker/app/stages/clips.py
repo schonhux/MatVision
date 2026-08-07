@@ -4,9 +4,34 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session
 
-from app.models import Match, Event
-from app.stages.base import StageError
 from app import storage
+from app.models import Event, Match
+from app.stages.base import StageError
+
+
+def run(match: Match, db: Session) -> dict:
+    events = (
+        db.query(Event)
+        .filter(
+            Event.match_id == match.id,
+            Event.source.like("model:%"),
+            Event.review_status != "rejected",
+        )
+        .order_by(Event.start_ms)
+        .all()
+    )
+    created = skipped = 0
+    for event in events:
+        if event.clip_key and storage.object_exists(event.clip_key):
+            skipped += 1
+            continue
+        cut_clip_for_event(match.id, event.id, db)
+        created += 1
+    return {
+        "event_count": len(events),
+        "clips_created": created,
+        "clips_reused": skipped,
+    }
 
 
 def cut_clip_for_event(match_id: str, event_id: str, db: Session) -> str:
@@ -32,7 +57,7 @@ def cut_clip_for_event(match_id: str, event_id: str, db: Session) -> str:
             "-t", f"{duration_s:.2f}", "-c", "copy", "-movflags", "+faststart",
             local_output,
         ]
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        result = subprocess.run(cmd, capture_output=True, text=True, check=False)
         if result.returncode != 0:
             raise StageError(f"ffmpeg clip cut failed: {result.stderr.strip()[-500:]}")
 

@@ -14,7 +14,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   getMatch, getVideoUrl, getToken,
-  listEvents, createEvent, updateEvent, deleteEvent,
+  listEvents, createEvent, updateEvent, deleteEvent, reviewEvent,
   listStates, createState, deleteState,
   listAthletes, setAthlete, updateMatchAnnotation,
   Match, MatchEvent, StateSegment, MatchAthlete,
@@ -66,6 +66,12 @@ export default function AnnotatePage() {
   const [evOutcome, setEvOutcome] = useState<Outcome>("successful");
   const [evTechnique, setEvTechnique] = useState("");
   const [evNote, setEvNote] = useState("");
+  const [editingEventId, setEditingEventId] = useState<string | null>(null);
+  const [editType, setEditType] = useState(EVENT_TYPES[0]);
+  const [editStart, setEditStart] = useState(0);
+  const [editEnd, setEditEnd] = useState(0);
+  const [editOutcome, setEditOutcome] = useState<Outcome>("successful");
+  const [editInitiator, setEditInitiator] = useState<Initiator>("user");
 
   // State form
   const [stName, setStName] = useState<StateName>("neutral");
@@ -74,7 +80,7 @@ export default function AnnotatePage() {
   const refresh = useCallback(async () => {
     try {
       const [m, e, s, a] = await Promise.all([
-        getMatch(matchId), listEvents(matchId), listStates(matchId, "human"), listAthletes(matchId),
+        getMatch(matchId), listEvents(matchId, "all", true), listStates(matchId, "human"), listAthletes(matchId),
       ]);
       setMatch(m); setEvents(e); setStates(s); setAthletes(a);
       if (m.video_keys.original || m.video_keys.analysis_720p) {
@@ -152,6 +158,48 @@ export default function AnnotatePage() {
       refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save state segment");
+    }
+  }
+
+  function beginEventCorrection(event: MatchEvent) {
+    setEditingEventId(event.id);
+    setEditType(event.type);
+    setEditStart(event.start_ms);
+    setEditEnd(event.end_ms);
+    setEditOutcome(event.outcome ?? "successful");
+    setEditInitiator(event.initiator ?? "user");
+  }
+
+  async function saveEventCorrection(eventId: string) {
+    if (editEnd <= editStart) {
+      setError("Event end must come after its start");
+      return;
+    }
+    try {
+      await updateEvent(matchId, eventId, {
+        type: editType,
+        start_ms: editStart,
+        end_ms: editEnd,
+        outcome: editOutcome,
+        initiator: editInitiator,
+        reason: "Reviewed in annotation console",
+        use_for_training: true,
+      });
+      setEditingEventId(null);
+      setError(null);
+      refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to correct event");
+    }
+  }
+
+  async function setEventReview(eventId: string, status: "confirmed" | "rejected") {
+    try {
+      await reviewEvent(matchId, eventId, status);
+      setError(null);
+      refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to review event");
     }
   }
 
@@ -375,19 +423,59 @@ export default function AnnotatePage() {
               <p className="text-xs text-neutral-500">None yet.</p>
             ) : (
               <ul className="max-h-56 space-y-1 overflow-y-auto text-sm">
-                {events.map((ev) => (
-                  <li key={ev.id} className="flex items-center justify-between gap-2">
-                    <button onClick={() => seek(ev.start_ms)} className="truncate text-left hover:text-neutral-300">
-                      <span className="font-mono text-xs text-neutral-500">{fmt(ev.start_ms)}</span>{" "}
-                      {ev.type.replace(/_/g, " ")}
-                      {ev.outcome && <span className="text-neutral-500"> · {ev.outcome}</span>}
-                    </button>
-                    <button
-                      onClick={async () => { await deleteEvent(matchId, ev.id); refresh(); }}
-                      className="text-xs text-neutral-600 hover:text-red-400"
-                    >✕</button>
-                  </li>
-                ))}
+                {events.map((ev) => {
+                  const modelEvent = ev.source.startsWith("model:");
+                  return (
+                    <li key={ev.id} className={`border-b border-neutral-800 pb-2 last:border-0 ${ev.review_status === "rejected" ? "opacity-50" : ""}`}>
+                      <div className="flex items-start justify-between gap-2">
+                        <button onClick={() => seek(ev.start_ms)} className="min-w-0 truncate text-left hover:text-neutral-300">
+                          <span className="font-mono text-xs text-neutral-500">{fmt(ev.start_ms)}</span>{" "}
+                          {ev.type.replace(/_/g, " ")}
+                          {ev.outcome && <span className="text-neutral-500"> · {ev.outcome}</span>}
+                        </button>
+                        <span className="shrink-0 text-[11px] text-neutral-600">
+                          {modelEvent && ev.confidence !== null ? `${Math.round(ev.confidence * 100)}% · ` : ""}
+                          {ev.review_status}
+                        </span>
+                      </div>
+
+                      {editingEventId === ev.id ? (
+                        <div className="mt-2 grid grid-cols-2 gap-1.5 text-xs">
+                          <select value={editType} onChange={(e) => setEditType(e.target.value)} className="col-span-2 rounded border border-neutral-700 bg-neutral-900 px-2 py-1.5">
+                            {EVENT_TYPES.map((type) => <option key={type} value={type}>{type.replace(/_/g, " ")}</option>)}
+                          </select>
+                          <input type="number" value={editStart} onChange={(e) => setEditStart(Number(e.target.value))} className="min-w-0 rounded border border-neutral-700 bg-neutral-900 px-2 py-1.5" aria-label="Event start milliseconds" />
+                          <input type="number" value={editEnd} onChange={(e) => setEditEnd(Number(e.target.value))} className="min-w-0 rounded border border-neutral-700 bg-neutral-900 px-2 py-1.5" aria-label="Event end milliseconds" />
+                          <select value={editOutcome} onChange={(e) => setEditOutcome(e.target.value as Outcome)} className="col-span-2 rounded border border-neutral-700 bg-neutral-900 px-2 py-1.5">
+                            {OUTCOMES.map((outcome) => <option key={outcome} value={outcome}>{outcome}</option>)}
+                          </select>
+                          <select value={editInitiator} onChange={(e) => setEditInitiator(e.target.value as Initiator)} className="col-span-2 rounded border border-neutral-700 bg-neutral-900 px-2 py-1.5">
+                            <option value="user">by me</option>
+                            <option value="opponent">by opponent</option>
+                          </select>
+                          <button onClick={() => saveEventCorrection(ev.id)} className="rounded bg-neutral-100 px-2 py-1.5 font-medium text-neutral-900">Save</button>
+                          <button onClick={() => setEditingEventId(null)} className="rounded bg-neutral-800 px-2 py-1.5">Cancel</button>
+                        </div>
+                      ) : (
+                        <div className="mt-1.5 flex flex-wrap gap-1.5 text-xs">
+                          {modelEvent ? (
+                            <>
+                              {ev.review_status !== "confirmed" && (
+                                <button onClick={() => setEventReview(ev.id, "confirmed")} className="rounded bg-emerald-950 px-2 py-1 text-emerald-300">Confirm</button>
+                              )}
+                              <button onClick={() => beginEventCorrection(ev)} className="rounded bg-neutral-800 px-2 py-1">Correct</button>
+                              {ev.review_status !== "rejected" && (
+                                <button onClick={() => setEventReview(ev.id, "rejected")} className="rounded bg-red-950 px-2 py-1 text-red-300">Reject</button>
+                              )}
+                            </>
+                          ) : (
+                            <button onClick={async () => { await deleteEvent(matchId, ev.id); refresh(); }} className="text-neutral-600 hover:text-red-400">Delete</button>
+                          )}
+                        </div>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </section>

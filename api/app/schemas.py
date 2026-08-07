@@ -54,6 +54,7 @@ class MatchResponse(BaseModel):
     video_keys: dict
     venue: str | None = None
     annotation_complete: bool = False
+    coach_tone: str = "balanced"
     created_at: datetime
     updated_at: datetime
 
@@ -62,6 +63,13 @@ class MatchResponse(BaseModel):
 
 class UploadCompleteRequest(BaseModel):
     match_id: str
+
+
+CoachTone = Literal["balanced", "hard", "extreme"]
+
+
+class MatchSettingsUpdate(BaseModel):
+    coach_tone: CoachTone
 
 
 # --- Jobs -----------------------------------------------------------------
@@ -127,6 +135,8 @@ class EventUpdateRequest(BaseModel):
     opponent_response: str | None = None
     technique: str | None = None
     detail: dict | None = None
+    reason: str | None = Field(default=None, max_length=500)
+    use_for_training: bool = True
 
     @model_validator(mode="after")
     def end_after_start_if_both_present(self):
@@ -141,9 +151,13 @@ class EventResponse(BaseModel):
     match_id: str
     type: str
     start_ms: int
+    peak_ms: int | None
     end_ms: int
     note: str | None
     source: str
+    confidence: float | None
+    measurements: dict
+    review_status: str
     initiator: str | None
     outcome: str | None
     state_before: str | None
@@ -153,6 +167,26 @@ class EventResponse(BaseModel):
     detail: dict
     annotator_id: str | None
     clip_key: str | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class EventReviewRequest(BaseModel):
+    status: Literal["confirmed", "rejected"]
+    reason: str | None = Field(default=None, max_length=500)
+    use_for_training: bool = True
+
+
+class CorrectionResponse(BaseModel):
+    id: str
+    event_id: str
+    corrected_by: str
+    field: str
+    old_value: object | None
+    new_value: object | None
+    reason: str | None
+    use_for_training: bool
     created_at: datetime
 
     model_config = {"from_attributes": True}

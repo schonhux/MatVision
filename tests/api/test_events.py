@@ -103,3 +103,78 @@ def test_cut_clip_rejects_event_from_other_match(signed_up_user, monkeypatch):
     resp = client.post(f"/matches/{match_b}/events/{event_id}/cut-clip", headers=headers)
     assert resp.status_code == 404
     assert enqueued == []
+
+
+def test_model_event_correction_and_review_are_recorded(signed_up_user, monkeypatch):
+    client, headers = signed_up_user
+    import app.storage as storage_module
+    monkeypatch.setattr(storage_module, "ensure_bucket", lambda: None)
+    monkeypatch.setattr(storage_module, "presigned_put_url", lambda *a, **kw: "https://fake/x")
+    match_id = _make_match(client, headers)
+
+    from app.database import SessionLocal
+    from app.models import Event
+    db = SessionLocal()
+    event = Event(
+        match_id=match_id,
+        type="shot_attempt",
+        start_ms=1000,
+        peak_ms=1500,
+        end_ms=2500,
+        source="model:rules-v1",
+        confidence=0.72,
+        review_status="unreviewed",
+        state_before="neutral",
+        state_after="scramble",
+    )
+    db.add(event)
+    db.commit()
+    event_id = event.id
+    db.close()
+
+    corrected = client.patch(
+        f"/matches/{match_id}/events/{event_id}",
+        json={"type": "defended_shot", "end_ms": 3000, "outcome": "failed"},
+        headers=headers,
+    )
+    assert corrected.status_code == 200, corrected.text
+    assert corrected.json()["review_status"] == "corrected"
+
+    confirmed = client.post(
+        f"/matches/{match_id}/events/{event_id}/review",
+        json={"status": "confirmed", "use_for_training": True},
+        headers=headers,
+    )
+    assert confirmed.status_code == 200
+    corrections = client.get(
+        f"/matches/{match_id}/events/{event_id}/corrections", headers=headers
+    ).json()
+    assert {item["field"] for item in corrections} == {
+        "type", "end_ms", "outcome", "review_status"
+    }
+    assert all(item["use_for_training"] for item in corrections)
+
+
+def test_rejected_model_events_are_hidden_by_default(signed_up_user, monkeypatch):
+    client, headers = signed_up_user
+    import app.storage as storage_module
+    monkeypatch.setattr(storage_module, "ensure_bucket", lambda: None)
+    monkeypatch.setattr(storage_module, "presigned_put_url", lambda *a, **kw: "https://fake/x")
+    match_id = _make_match(client, headers)
+
+    from app.database import SessionLocal
+    from app.models import Event
+    db = SessionLocal()
+    db.add(Event(
+        match_id=match_id, type="restart", start_ms=100, end_ms=500,
+        source="model:rules-v1", review_status="rejected",
+    ))
+    db.commit()
+    db.close()
+
+    visible = client.get(f"/matches/{match_id}/events?source=model", headers=headers).json()
+    all_events = client.get(
+        f"/matches/{match_id}/events?source=model&include_rejected=true", headers=headers
+    ).json()
+    assert visible == []
+    assert len(all_events) == 1

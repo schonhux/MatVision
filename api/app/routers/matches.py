@@ -1,17 +1,17 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.database import get_db
-from app.models import User, Match, MatchStatus, Job, JobStageStatus, PIPELINE_STAGES
-from app.schemas import (
-    MatchCreateRequest,
-    PresignedUploadResponse,
-    MatchResponse,
-    UploadCompleteRequest,
-)
-from app.deps import get_current_user
 from app import storage
 from app.config import settings
+from app.database import get_db
+from app.deps import get_current_user
+from app.models import PIPELINE_STAGES, Job, JobStageStatus, Match, MatchStatus, User
+from app.schemas import (
+    MatchCreateRequest,
+    MatchResponse,
+    MatchSettingsUpdate,
+    PresignedUploadResponse,
+)
 
 router = APIRouter(prefix="/matches", tags=["matches"])
 
@@ -82,6 +82,20 @@ def list_matches(db: Session = Depends(get_db), current_user: User = Depends(get
 @router.get("/{match_id}", response_model=MatchResponse)
 def get_match(match_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     return _get_owned_match(db, match_id, current_user)
+
+
+@router.patch("/{match_id}/settings", response_model=MatchResponse)
+def update_match_settings(
+    match_id: str,
+    payload: MatchSettingsUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    match = _get_owned_match(db, match_id, current_user)
+    match.coach_tone = payload.coach_tone
+    db.commit()
+    db.refresh(match)
+    return match
 
 
 @router.get("/{match_id}/video-url")

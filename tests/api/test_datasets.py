@@ -4,7 +4,6 @@ self-describing, correctly split, and (critically) that it refuses to ship a
 dataset with leakage.
 """
 
-import pytest
 
 
 def _mock_storage(monkeypatch):
@@ -65,12 +64,13 @@ def test_export_is_self_describing(signed_up_user, monkeypatch):
     _make_annotated_match(client, headers, "m1", "Schon", venue="Hilton")
 
     body = client.get("/datasets/export", headers=headers).json()
-    assert body["schema_version"] == "1.0"
+    assert body["schema_version"] == "1.1"
     assert "exported_at" in body
     assert body["split_config"]["grouped_by"] == ["match_id", "athlete", "venue"]
     assert body["split_config"]["leakage_verified"] is True
     assert body["summary"]["event_count"] == 1
     assert body["summary"]["state_segment_count"] == 1
+    assert body["summary"]["correction_count"] == 0
 
 
 def test_export_contains_full_annotation_payload(signed_up_user, monkeypatch):
@@ -87,6 +87,39 @@ def test_export_contains_full_annotation_payload(signed_up_user, monkeypatch):
     assert m["state_segments"][0]["state"] == "neutral"
     assert m["events"][0]["initiator"] == "user"
     assert m["events"][0]["outcome"] == "successful"
+
+
+def test_export_includes_model_corrections(signed_up_user, monkeypatch):
+    client, headers = signed_up_user
+    _mock_storage(monkeypatch)
+    match_id = _make_annotated_match(client, headers, "m1", "Schon")
+
+    from app.database import SessionLocal
+    from app.models import Event
+    db = SessionLocal()
+    event = Event(
+        match_id=match_id,
+        type="shot_attempt",
+        start_ms=8000,
+        end_ms=9500,
+        source="model:rules-v1",
+        review_status="unreviewed",
+    )
+    db.add(event)
+    db.commit()
+    event_id = event.id
+    db.close()
+
+    client.patch(
+        f"/matches/{match_id}/events/{event_id}",
+        json={"type": "defended_shot", "outcome": "failed"},
+        headers=headers,
+    )
+    body = client.get("/datasets/export", headers=headers).json()
+    model_event = next(event for event in body["matches"][0]["events"] if event["source"].startswith("model:"))
+    assert model_event["review_status"] == "corrected"
+    assert {item["field"] for item in model_event["corrections"]} == {"type", "outcome"}
+    assert body["summary"]["correction_count"] == 2
 
 
 def test_export_split_is_leakage_free_for_shared_athlete(signed_up_user, monkeypatch):
@@ -148,6 +181,7 @@ def test_dataset_stats_tracks_progress(signed_up_user, monkeypatch):
     assert stats["annotated_matches"] == 1
     assert stats["total_events"] == 1
     assert stats["total_state_segments"] == 1
+    assert stats["total_corrections"] == 0
     assert stats["events_by_type"]["shot_attempt"] == 1
     assert stats["states_by_type"]["neutral"] == 1
     assert stats["labeled_minutes"] == 0.5  # 30000ms
